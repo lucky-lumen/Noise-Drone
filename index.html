@@ -1,0 +1,1258 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Noise + Drone</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#0b0c10; color:#e7e7e7; }
+    header { padding:16px 18px; border-bottom:1px solid #1f2430; display:flex; gap:12px; align-items:center; justify-content:space-between; }
+    header h1 { margin:0; font-size:16px; font-weight:700; letter-spacing:.2px; }
+    header .hint { font-size:12px; color:#aab2c0; }
+    main { display:grid; grid-template-columns: 1.1fr .9fr; gap:14px; padding:14px; }
+    @media (max-width: 980px){ main{ grid-template-columns:1fr; } }
+    .card { background:#0f121a; border:1px solid #1f2430; border-radius:14px; padding:14px; box-shadow: 0 10px 40px rgba(0,0,0,.25); }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .btn {
+      background:#1b2230; border:1px solid #2a3347; color:#e7e7e7;
+      padding:9px 12px; border-radius:10px; cursor:pointer; font-weight:600;
+    }
+    .btn:hover { filter:brightness(1.08); }
+    .btn.primary { background:#2a4cff; border-color:#3a5bff; }
+    .btn.danger { background:#3a1a1a; border-color:#5a2a2a; }
+    .btn.small { padding:6px 9px; border-radius:9px; font-size:12px; }
+    .btn.ghost { background:transparent; }
+    .btn[disabled]{ opacity:.5; cursor:not-allowed; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    @media (max-width: 700px){ .grid{ grid-template-columns:1fr; } }
+    .param { border:1px solid #1f2430; border-radius:12px; padding:10px; background:#0c0f16; }
+    .param .top { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+    .param label { font-size:12px; color:#b7c0cf; }
+    .param .value { font-size:12px; color:#e7e7e7; font-variant-numeric: tabular-nums; }
+    .param input[type="range"]{ width:100%; margin-top:8px; }
+    .pill { font-size:11px; color:#c9d2e6; border:1px solid #2a3347; padding:4px 8px; border-radius:999px; background:#0b0d13; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    textarea, input[type="text"], select, input[type="number"]{
+      background:#0b0d13; color:#e7e7e7; border:1px solid #2a3347; border-radius:10px; padding:9px 10px;
+    }
+    textarea { width:100%; min-height:86px; resize:vertical; }
+    .sectionTitle { font-size:13px; color:#cdd6ea; margin:0 0 8px; font-weight:800; letter-spacing:.2px; }
+    .hr { height:1px; background:#1f2430; margin:12px 0; }
+    .table { width:100%; border-collapse:collapse; font-size:12px; }
+    .table th, .table td { border-bottom:1px solid #1f2430; padding:8px 6px; text-align:left; vertical-align:top; }
+    .muted { color:#aab2c0; font-size:12px; }
+    .ok { color:#7dff9a; }
+    .warn { color:#ffd27d; }
+    .bad { color:#ff7d7d; }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Noise + Drone</h1>
+    <div class="hint"></div>
+  </div>
+  <div class="row">
+    <span id="audioState" class="pill mono">AUDIO: OFF</span>
+    <button id="startBtn" class="btn primary">Start</button>
+    <button id="stopBtn" class="btn danger" disabled>Stop</button>
+  </div>
+</header>
+
+<main>
+  <section class="card">
+    <p class="sectionTitle">Sound Engine</p>
+    <div class="grid" id="params"></div>
+
+    <div class="hr"></div>
+
+    <div class="row" style="justify-content:space-between;">
+      <div class="row">
+        <button id="randomNow" class="btn">Randomize Now</button>
+        <button id="reset" class="btn ghost">Reset</button>
+      </div>
+      <div class="row">
+        <span class="pill mono" id="seedPill">seed: —</span>
+        <button id="newSeed" class="btn small">New Seed</button>
+      </div>
+    </div>
+
+    <div class="hr"></div>
+
+    <p class="sectionTitle">Random Engine</p>
+    <div class="row">
+      <label class="muted">Every</label>
+      <input id="randEvery" type="number" min="0.1" step="0.1" value="6" style="width:90px" />
+      <label class="muted">seconds</label>
+      <button id="randToggle" class="btn">Enable</button>
+      <span class="pill" id="randState">Random: OFF</span>
+      <span class="muted">Tip: lock parameters you don’t want to change.</span>
+    </div>
+
+    <div class="hr"></div>
+
+    <p class="sectionTitle">Status</p>
+    <div class="muted mono" id="statusLog" style="white-space:pre-wrap; line-height:1.35;"></div>
+  </section>
+
+  <aside class="card">
+    <p class="sectionTitle">MIDI</p>
+    <div class="row">
+      <button id="midiInit" class="btn">Enable MIDI</button>
+      <span id="midiState" class="pill">MIDI: OFF</span>
+    </div>
+
+    <div class="row" style="margin-top:10px;">
+      <label class="muted">Input</label>
+      <select id="midiInSelect" style="min-width:240px" disabled></select>
+      <button id="midiRefresh" class="btn small" disabled>Refresh</button>
+    </div>
+
+    <div class="hr"></div>
+
+    <p class="sectionTitle">CC Mappings</p>
+    <div class="muted">Click <span class="pill">Learn</span>, then move a knob/fader. Mappings are saved in this tab (localStorage).</div>
+    <div style="margin-top:10px; overflow:auto; max-height:260px;">
+      <table class="table" id="mapTable">
+        <thead>
+          <tr>
+            <th>Parameter</th>
+            <th>CC</th>
+            <th>Channel</th>
+            <th>Mode</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="hr"></div>
+
+    <p class="sectionTitle">Autopilot Agent</p>
+    <div class="muted">Type a goal (e.g. “more harsh”, “more airy”, “unstable pitch”, “thicker wall”), then run the agent. It will steer parameters over time.</div>
+    <textarea id="agentGoal" placeholder="Goal: denser, harsher, unstable pitch, slow breathing..." spellcheck="false"></textarea>
+
+    <div class="row" style="margin-top:8px;">
+      <label class="muted">Tick</label>
+      <input id="agentTick" type="number" min="0.2" step="0.1" value="1.0" style="width:90px" />
+      <span class="muted">seconds</span>
+      <button id="agentToggle" class="btn">Run</button>
+      <span class="pill" id="agentState">Agent: OFF</span>
+    </div>
+
+    <div class="row" style="margin-top:10px;">
+      <button id="macroTension" class="btn small">Macro: Tension</button>
+      <button id="macroRelease" class="btn small">Macro: Release</button>
+      <button id="macroAbyss" class="btn small">Macro: Abyss</button>
+      <button id="clearAutomation" class="btn small ghost">Stop All Automation</button>
+    </div>
+
+    <div class="hr"></div>
+
+    <p class="sectionTitle">Export / Import</p>
+    <div class="row">
+      <button id="exportBtn" class="btn small">Export JSON</button>
+      <button id="importBtn" class="btn small">Import JSON</button>
+      <input id="importFile" type="file" accept="application/json" style="display:none"/>
+    </div>
+    <div class="muted" style="margin-top:8px;">Exports parameters + locks + MIDI mappings + seed.</div>
+  </aside>
+</main>
+
+<script>
+(() => {
+  // ---------- Utilities ----------
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+
+  // Deterministic PRNG (Mulberry32)
+  function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function() {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const randomSeed = () => (crypto.getRandomValues(new Uint32Array(1))[0]) >>> 0;
+
+  const logEl = document.getElementById('statusLog');
+  const log = (msg) => {
+    const ts = new Date().toLocaleTimeString();
+    logEl.textContent = `[${ts}] ${msg}\n` + logEl.textContent.slice(0, 3500);
+  };
+
+  // ---------- Parameter model ----------
+  const PARAMS = [
+    // name, id, min, max, default, curve ('lin'|'exp'), unit, randomStrength (0..1)
+    ["Master", "master", 0, 1, 0.65, "lin", "", 0.7],
+    ["Drone Base Freq", "baseFreq", 18, 120, 42, "exp", "Hz", 0.9],
+    ["Wall Thickness", "voices", 2, 16, 9, "lin", "voices", 0.8],
+    ["Detune", "detune", 0, 45, 13, "lin", "cents", 0.9],
+    ["Noise Level", "noise", 0, 1, 0.45, "lin", "", 0.9],
+    ["Filter Cutoff", "cutoff", 60, 12000, 2600, "exp", "Hz", 0.9],
+    ["Filter Resonance", "q", 0.1, 22, 2.2, "exp", "", 0.8],
+    ["Drive", "drive", 0, 1, 0.62, "lin", "", 0.9],
+    ["Feedback", "fb", 0, 0.96, 0.72, "lin", "", 0.85],
+    ["Reverb Mix", "rvb", 0, 1, 0.35, "lin", "", 0.7],
+    ["LFO Rate", "lfoRate", 0.02, 12, 0.22, "exp", "Hz", 0.8],
+    ["LFO Depth", "lfoDepth", 0, 1, 0.18, "lin", "", 0.8],
+  ];
+
+  // State (values normalized to natural units, not 0..1)
+  const state = {
+    seed: randomSeed(),
+    values: {},
+    locks: {},
+    midi: {
+      enabled: false,
+      inputId: null,
+      maps: {} // paramId -> {cc, ch, mode:'absolute'|'relative'}
+    },
+    random: { enabled: false, every: 6, timer: null },
+    agent: { enabled: false, tick: 1.0, timer: null, goal: "" },
+    audio: { ctx: null, running: false }
+  };
+
+  // Init defaults
+  for (const [name,id,min,max,def] of PARAMS) {
+    state.values[id] = def;
+    state.locks[id] = false;
+  }
+
+  const saveKey = "noiseDroneWallApp_v1";
+  const save = () => localStorage.setItem(saveKey, JSON.stringify(state));
+  const load = () => {
+    try {
+      const raw = localStorage.getItem(saveKey);
+      if (!raw) return false;
+      const obj = JSON.parse(raw);
+      if (!obj || !obj.values) return false;
+      // Shallow merge (keep newer fields)
+      state.seed = obj.seed ?? state.seed;
+      state.values = { ...state.values, ...obj.values };
+      state.locks  = { ...state.locks,  ...obj.locks };
+      state.midi.enabled = !!obj.midi?.enabled;
+      state.midi.inputId = obj.midi?.inputId ?? null;
+      state.midi.maps = { ...obj.midi?.maps };
+      state.random.enabled = !!obj.random?.enabled;
+      state.random.every = obj.random?.every ?? state.random.every;
+      state.agent.enabled = !!obj.agent?.enabled;
+      state.agent.tick = obj.agent?.tick ?? state.agent.tick;
+      state.agent.goal = obj.agent?.goal ?? "";
+      return true;
+    } catch { return false; }
+  };
+  load();
+
+  // ---------- UI ----------
+  const paramsEl = document.getElementById('params');
+  const seedPill = document.getElementById('seedPill');
+  const newSeedBtn = document.getElementById('newSeed');
+
+  function fmt(id, v) {
+    if (id === "voices") return `${Math.round(v)}`;
+    if (id === "baseFreq" || id === "cutoff" || id === "lfoRate") return `${v.toFixed(v < 100 ? 2 : 0)}`;
+    if (id === "detune") return `${v.toFixed(1)}`;
+    if (id === "q") return `${v.toFixed(2)}`;
+    return `${v.toFixed(3)}`;
+  }
+
+  function paramTo01(p, v) {
+    const [,id,min,max,,curve] = p;
+    const t = (v - min) / (max - min);
+    return clamp(t, 0, 1);
+  }
+  function paramFrom01(p, t) {
+    const [,id,min,max,,curve] = p;
+    t = clamp(t, 0, 1);
+    if (curve === "exp") {
+      // exp mapping in value domain
+      const a = Math.log(min);
+      const b = Math.log(max);
+      return Math.exp(lerp(a, b, t));
+    }
+    return lerp(min, max, t);
+  }
+  function valueToSlider(p, v) {
+    const [,id,min,max,,curve] = p;
+    if (curve === "exp") {
+      const a = Math.log(min);
+      const b = Math.log(max);
+      return clamp((Math.log(v) - a) / (b - a), 0, 1);
+    }
+    return clamp((v - min) / (max - min), 0, 1);
+  }
+
+  function renderParams() {
+    paramsEl.innerHTML = "";
+    for (const p of PARAMS) {
+      const [name,id,min,max,def,curve,unit] = p;
+      const wrap = document.createElement('div');
+      wrap.className = "param";
+      wrap.innerHTML = `
+        <div class="top">
+          <div>
+            <label>${name}</label>
+            <div class="muted mono">${id}</div>
+          </div>
+          <div style="text-align:right">
+            <div class="value mono" id="val_${id}">${fmt(id, state.values[id])}${unit ? " " + unit : ""}</div>
+            <div class="row" style="justify-content:flex-end; margin-top:6px;">
+              <button class="btn small" id="learn_${id}" title="MIDI learn for this parameter">Learn</button>
+              <button class="btn small" id="lock_${id}" title="Lock from random/agent">🔒</button>
+            </div>
+          </div>
+        </div>
+        <input id="rng_${id}" type="range" min="0" max="1" step="0.001" value="${valueToSlider(p, state.values[id])}">
+      `;
+      paramsEl.appendChild(wrap);
+
+      const rng = wrap.querySelector(`#rng_${id}`);
+      const valEl = wrap.querySelector(`#val_${id}`);
+      const lockBtn = wrap.querySelector(`#lock_${id}`);
+      const learnBtn = wrap.querySelector(`#learn_${id}`);
+
+      const syncLockBtn = () => {
+        const locked = !!state.locks[id];
+        lockBtn.textContent = locked ? "🔒 Locked" : "🔓 Lock";
+        lockBtn.classList.toggle("primary", locked);
+      };
+      syncLockBtn();
+
+      rng.addEventListener('input', () => {
+        const v = paramFrom01(p, parseFloat(rng.value));
+        setParam(id, v, { from: "ui" });
+      });
+
+      lockBtn.addEventListener('click', () => {
+        state.locks[id] = !state.locks[id];
+        syncLockBtn();
+        save();
+      });
+
+      learnBtn.addEventListener('click', () => midiLearnStart(id));
+    }
+  }
+
+  function updateParamUI(id) {
+    const p = PARAMS.find(x => x[1] === id);
+    const v = state.values[id];
+    const valEl = document.getElementById(`val_${id}`);
+    const rng = document.getElementById(`rng_${id}`);
+    if (valEl) valEl.textContent = `${fmt(id, v)}${p[6] ? " " + p[6] : ""}`;
+    if (rng) rng.value = valueToSlider(p, v);
+  }
+
+  function updateSeedUI() {
+    seedPill.textContent = `seed: ${state.seed >>> 0}`;
+  }
+
+  renderParams();
+  updateSeedUI();
+  document.getElementById('agentGoal').value = state.agent.goal || "";
+  document.getElementById('randEvery').value = state.random.every;
+  document.getElementById('agentTick').value = state.agent.tick;
+
+  // ---------- Audio Engine (Web Audio) ----------
+  let nodes = null;
+
+  function makeNoiseBuffer(ctx, seconds = 2) {
+    const sr = ctx.sampleRate;
+    const len = Math.floor(seconds * sr);
+    const buf = ctx.createBuffer(1, len, sr);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      // slightly pink-ish by integrating a bit
+      const white = (Math.random() * 2 - 1);
+      data[i] = white * 0.6;
+    }
+    return buf;
+  }
+
+  function softClipCurve(amount = 0.6) {
+    // waveshaper curve
+    const n = 2048;
+    const curve = new Float32Array(n);
+    const k = 1 + amount * 20;
+    for (let i = 0; i < n; i++) {
+      const x = (i * 2) / (n - 1) - 1;
+      curve[i] = (1 + k) * x / (1 + k * Math.abs(x));
+    }
+    return curve;
+  }
+
+  function startAudio() {
+    if (state.audio.running) return;
+    const ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: "interactive" });
+
+    // Sources
+    const wallMix = ctx.createGain();
+    const noiseGain = ctx.createGain();
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+
+    const shaper = ctx.createWaveShaper();
+    shaper.oversample = "4x";
+
+    // Feedback loop
+    const fbSend = ctx.createGain();
+    const fbDelay = ctx.createDelay(1.0);
+    fbDelay.delayTime.value = 0.08;
+    const fbFilter = ctx.createBiquadFilter();
+    fbFilter.type = "bandpass";
+    fbFilter.frequency.value = 900;
+    fbFilter.Q.value = 0.6;
+    const fbGain = ctx.createGain();
+
+    // Simple "reverb-ish" network
+    const wet = ctx.createGain();
+    const dry = ctx.createGain();
+    const rvb1 = ctx.createDelay(2.0);
+    const rvb2 = ctx.createDelay(2.0);
+    const rvb3 = ctx.createDelay(2.0);
+    const rvbF1 = ctx.createBiquadFilter();
+    const rvbF2 = ctx.createBiquadFilter();
+    rvbF1.type = "lowpass";
+    rvbF2.type = "highpass";
+    rvbF1.frequency.value = 6000;
+    rvbF2.frequency.value = 180;
+
+    // Master
+    const master = ctx.createGain();
+
+    // LFO
+    const lfo = ctx.createOscillator();
+    lfo.type = "sine";
+    const lfoGain = ctx.createGain();
+
+    // Drone oscillators (we rebuild on voices change)
+    let oscBank = [];
+    function rebuildOscBank(voices) {
+      // stop existing
+      for (const o of oscBank) {
+        try { o.osc.stop(); } catch {}
+        try { o.osc.disconnect(); } catch {}
+        try { o.g.disconnect(); } catch {}
+      }
+      oscBank = [];
+      const v = Math.round(voices);
+      for (let i = 0; i < v; i++) {
+        const osc = ctx.createOscillator();
+        osc.type = (i % 3 === 0) ? "sawtooth" : (i % 3 === 1 ? "triangle" : "square");
+        const g = ctx.createGain();
+        g.gain.value = 0.08 / Math.max(1, v / 6);
+
+        // Slightly different LFO depth per voice
+        const lfoVoice = ctx.createGain();
+        lfoVoice.gain.value = 1;
+        lfo.connect(lfoVoice);
+        lfoVoice.connect(osc.detune);
+
+        osc.connect(g);
+        g.connect(wallMix);
+        osc.start();
+
+        oscBank.push({ osc, g, lfoVoice });
+      }
+      applyParamsToAudio(); // re-apply detune/freq
+    }
+
+    // Noise
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 2);
+    noise.loop = true;
+    noise.connect(noiseGain);
+    noise.start();
+
+    // Routing
+    // wall + noise -> filter -> shaper -> split dry/wet -> master -> destination
+    const pre = ctx.createGain();
+    wallMix.connect(pre);
+    noiseGain.connect(pre);
+
+    pre.connect(filter);
+    filter.connect(shaper);
+
+    shaper.connect(dry);
+    shaper.connect(wet);
+
+    // reverb network (diffusion-ish)
+    wet.connect(rvbF2);
+    rvbF2.connect(rvb1);
+    rvb1.connect(rvbF1);
+    rvbF1.connect(rvb2);
+    rvb2.connect(rvb3);
+    rvb3.connect(wet); // light feedback inside reverb
+    rvb3.connect(master);
+
+    dry.connect(master);
+    master.connect(ctx.destination);
+
+    // Feedback loop around shaper output back into pre
+    shaper.connect(fbSend);
+    fbSend.connect(fbDelay);
+    fbDelay.connect(fbFilter);
+    fbFilter.connect(fbGain);
+    fbGain.connect(pre);
+
+    // LFO routing (to filter cutoff + subtle master tremble)
+    lfo.connect(lfoGain);
+    lfo.start();
+
+    nodes = {
+      ctx, wallMix, noiseGain, pre, filter, shaper, dry, wet,
+      master, fbSend, fbDelay, fbFilter, fbGain,
+      lfo, lfoGain,
+      rebuildOscBank
+    };
+
+    // init bank
+    nodes.rebuildOscBank(state.values.voices);
+
+    state.audio.ctx = ctx;
+    state.audio.running = true;
+    document.getElementById('audioState').textContent = "AUDIO: ON";
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('stopBtn').disabled = false;
+    log("Audio started.");
+    applyParamsToAudio();
+  }
+
+  function stopAudio() {
+    if (!state.audio.running) return;
+    try {
+      nodes?.ctx?.close();
+    } catch {}
+    nodes = null;
+    state.audio.ctx = null;
+    state.audio.running = false;
+    document.getElementById('audioState').textContent = "AUDIO: OFF";
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('stopBtn').disabled = true;
+    log("Audio stopped.");
+  }
+
+  function applyParamsToAudio() {
+    if (!nodes || !state.audio.running) return;
+    const t = nodes.ctx.currentTime;
+
+    const baseFreq = state.values.baseFreq;
+    const voices = Math.round(state.values.voices);
+    const detune = state.values.detune;
+    const noise = state.values.noise;
+    const cutoff = state.values.cutoff;
+    const q = state.values.q;
+    const drive = state.values.drive;
+    const fb = state.values.fb;
+    const rvb = state.values.rvb;
+    const master = state.values.master;
+
+    // Voices: rebuild if mismatch
+    if (nodes && nodes.rebuildOscBank) {
+      // check current osc count
+      // oscBank stored in closure; easiest: rebuild when slider changes via setParam
+    }
+
+    // Apply to osc bank (detune spread & freq)
+    // We'll approximate: voice i detune around center
+    const oscNodes = [];
+    // Access via AudioContext graph: we kept oscBank in closure only.
+    // So we embed oscBank in nodes by attaching on rebuild:
+    // (handled in rebuild function by setting nodes.oscBank)
+  }
+
+  // Patch applyParamsToAudio to access oscBank
+  // We'll re-wrap rebuildOscBank to store oscBank on nodes.
+  // (Done by re-defining after startAudio, but easiest: do inside startAudio: attach oscBank)
+  // We'll implement by monkey patching when audio starts:
+  function patchOscAccess() {
+    if (!nodes || nodes.oscBank) return;
+    // no-op, oscBank is inside startAudio closure; we can expose it by storing in nodes in rebuild.
+    // We can't here. We'll adjust startAudio implementation by relying on setParam hooks for freq/detune.
+  }
+
+  // We'll drive freq/detune by iterating over AudioNodes connected to wallMix:
+  // Not trivial to list. So: store oscBank on nodes at creation time by slight change:
+  // We'll do it now by re-starting audio if needed? Not ideal.
+  // Instead: keep a global reference updated by rebuild.
+  let oscBankGlobal = [];
+
+  // Modify rebuildOscBank through wrapper when audio starts.
+  function wrapRebuildAccess() {
+    if (!nodes) return;
+    const orig = nodes.rebuildOscBank;
+    nodes.rebuildOscBank = (voices) => {
+      orig(voices);
+      // Capture oscBank via scanning? Not possible.
+      // We'll instead recreate rebuild fully here with access to nodes.
+      // For simplicity: implement a new rebuild that creates bank and stores it.
+      const ctx = nodes.ctx;
+      // stop previous
+      for (const o of oscBankGlobal) {
+        try { o.osc.stop(); } catch {}
+        try { o.osc.disconnect(); } catch {}
+        try { o.g.disconnect(); } catch {}
+        try { o.lfoVoice.disconnect(); } catch {}
+      }
+      oscBankGlobal = [];
+      const v = Math.round(voices);
+      for (let i = 0; i < v; i++) {
+        const osc = ctx.createOscillator();
+        osc.type = (i % 3 === 0) ? "sawtooth" : (i % 3 === 1 ? "triangle" : "square");
+        const g = ctx.createGain();
+        g.gain.value = 0.08 / Math.max(1, v / 6);
+
+        const lfoVoice = ctx.createGain();
+        lfoVoice.gain.value = 1;
+        nodes.lfo.connect(lfoVoice);
+        lfoVoice.connect(osc.detune);
+
+        osc.connect(g);
+        g.connect(nodes.wallMix);
+        osc.start();
+
+        oscBankGlobal.push({ osc, g, lfoVoice });
+      }
+      applyAllNow();
+    };
+  }
+
+  function applyAllNow() {
+    if (!nodes || !state.audio.running) return;
+    const ctx = nodes.ctx;
+    const now = ctx.currentTime;
+
+    const baseFreq = state.values.baseFreq;
+    const detune = state.values.detune;
+    const noise = state.values.noise;
+    const cutoff = state.values.cutoff;
+    const q = state.values.q;
+    const drive = state.values.drive;
+    const fb = state.values.fb;
+    const rvb = state.values.rvb;
+    const master = state.values.master;
+    const lfoRate = state.values.lfoRate;
+    const lfoDepth = state.values.lfoDepth;
+
+    // Drone wall: spread detune and micro frequency offsets
+    const v = Math.max(1, oscBankGlobal.length);
+    for (let i = 0; i < v; i++) {
+      const o = oscBankGlobal[i];
+      const center = (i - (v - 1) / 2) / Math.max(1, v - 1); // -0.5..0.5
+      const cents = center * detune * 2.0;
+      const micro = 1 + (center * 0.012);
+      const f = clamp(baseFreq * micro, 12, 240);
+      o.osc.frequency.setTargetAtTime(f, now, 0.02);
+      o.osc.detune.setTargetAtTime(cents, now, 0.05);
+      // subtle per-voice amplitude variance
+      o.g.gain.setTargetAtTime(0.08 / Math.max(1, v / 6) * (0.8 + (i % 5) * 0.06), now, 0.08);
+      o.lfoVoice.gain.setTargetAtTime(80 * lfoDepth * (0.6 + (i % 7) * 0.05), now, 0.06);
+    }
+
+    // Noise level
+    nodes.noiseGain.gain.setTargetAtTime(noise, now, 0.05);
+
+    // Filter
+    nodes.filter.frequency.setTargetAtTime(cutoff, now, 0.06);
+    nodes.filter.Q.setTargetAtTime(q, now, 0.06);
+
+    // Drive / waveshaper
+    nodes.shaper.curve = softClipCurve(drive);
+
+    // Feedback (keep safe)
+    nodes.fbGain.gain.setTargetAtTime(clamp(fb, 0, 0.96), now, 0.06);
+    nodes.fbSend.gain.setTargetAtTime(0.45 + drive * 0.35, now, 0.08);
+    nodes.fbDelay.delayTime.setTargetAtTime(0.03 + (1 - (cutoff / 12000)) * 0.12, now, 0.1);
+    nodes.fbFilter.frequency.setTargetAtTime(200 + cutoff * 0.18, now, 0.12);
+
+    // Reverb mix
+    nodes.wet.gain.setTargetAtTime(rvb, now, 0.12);
+    nodes.dry.gain.setTargetAtTime(1 - rvb * 0.85, now, 0.12);
+
+    // LFO
+    nodes.lfo.frequency.setTargetAtTime(lfoRate, now, 0.08);
+    // Also modulate filter cutoff via lfoGain
+    nodes.lfoGain.gain.setTargetAtTime(0, now, 0.01); // not directly connected; kept for future expansions
+
+    // Master
+    nodes.master.gain.setTargetAtTime(master, now, 0.08);
+  }
+
+  function setParam(id, v, { from = "ui" } = {}) {
+    const p = PARAMS.find(x => x[1] === id);
+    if (!p) return;
+    const min = p[2], max = p[3];
+    if (id === "voices") v = Math.round(v);
+    v = clamp(v, min, max);
+    state.values[id] = v;
+    updateParamUI(id);
+    save();
+
+    if (nodes && state.audio.running) {
+      if (id === "voices") nodes.rebuildOscBank(v);
+      else applyAllNow();
+    }
+  }
+
+  // Start/Stop
+  document.getElementById('startBtn').addEventListener('click', async () => {
+    startAudio();
+    wrapRebuildAccess(); // expose osc bank + stable control
+    // rebuild once through wrapped method to populate oscBankGlobal
+    nodes.rebuildOscBank(state.values.voices);
+  });
+  document.getElementById('stopBtn').addEventListener('click', stopAudio);
+
+  // Seed controls
+  newSeedBtn.addEventListener('click', () => {
+    state.seed = randomSeed();
+    updateSeedUI();
+    save();
+    log("New seed generated.");
+  });
+
+  // Reset
+  document.getElementById('reset').addEventListener('click', () => {
+    for (const p of PARAMS) {
+      const [,id,,,def] = p;
+      state.values[id] = def;
+      state.locks[id] = false;
+      updateParamUI(id);
+    }
+    renderParams();
+    if (nodes && state.audio.running) {
+      nodes.rebuildOscBank(state.values.voices);
+      applyAllNow();
+    }
+    save();
+    log("Reset to defaults.");
+    renderMidiTable();
+  });
+
+  // ---------- Random Engine ----------
+  const randEvery = document.getElementById('randEvery');
+  const randToggle = document.getElementById('randToggle');
+  const randState = document.getElementById('randState');
+  const randomNow = document.getElementById('randomNow');
+
+  function setRandomUI() {
+    randState.textContent = `Random: ${state.random.enabled ? "ON" : "OFF"}`;
+    randToggle.textContent = state.random.enabled ? "Disable" : "Enable";
+  }
+
+  function randomizeOnce(intensity = 1.0) {
+    const rng = mulberry32(state.seed ^ (Date.now() & 0xffffffff));
+    for (const p of PARAMS) {
+      const [name,id,min,max,def,curve,unit,str] = p;
+      if (state.locks[id]) continue;
+      const strength = clamp((str ?? 0.7) * intensity, 0, 1);
+
+      // Current position in 0..1 slider space, then random walk
+      const cur01 = valueToSlider(p, state.values[id]);
+      // Bias some params to keep walls stable
+      const step = (rng() * 2 - 1) * 0.45 * strength;
+      let next01 = clamp(cur01 + step, 0, 1);
+
+      // Occasional jumps for “events”
+      if (rng() < 0.08 * strength) next01 = clamp(rng(), 0, 1);
+
+      const next = paramFrom01(p, next01);
+      setParam(id, next, { from: "random" });
+    }
+    // advance seed deterministically
+    state.seed = (state.seed + 0x9E3779B9) >>> 0;
+    updateSeedUI();
+    save();
+    log("Randomize tick applied.");
+  }
+
+  function startRandom() {
+    stopRandom();
+    state.random.every = parseFloat(randEvery.value) || 6;
+    state.random.enabled = true;
+    state.random.timer = setInterval(() => randomizeOnce(1.0), Math.max(100, state.random.every * 1000));
+    setRandomUI();
+    save();
+    log(`Random engine enabled (${state.random.every}s).`);
+  }
+  function stopRandom() {
+    if (state.random.timer) clearInterval(state.random.timer);
+    state.random.timer = null;
+    state.random.enabled = false;
+    setRandomUI();
+    save();
+    log("Random engine disabled.");
+  }
+
+  randEvery.addEventListener('change', () => {
+    state.random.every = parseFloat(randEvery.value) || 6;
+    save();
+    if (state.random.enabled) startRandom();
+  });
+
+  randToggle.addEventListener('click', () => {
+    if (state.random.enabled) stopRandom();
+    else startRandom();
+  });
+
+  randomNow.addEventListener('click', () => randomizeOnce(1.0));
+  setRandomUI();
+  if (state.random.enabled) startRandom();
+
+  // ---------- WebMIDI ----------
+  const midiInitBtn = document.getElementById('midiInit');
+  const midiStateEl = document.getElementById('midiState');
+  const midiInSelect = document.getElementById('midiInSelect');
+  const midiRefresh = document.getElementById('midiRefresh');
+  const mapTbody = document.querySelector('#mapTable tbody');
+
+  let midiAccess = null;
+  let midiInput = null;
+  let learnTarget = null; // paramId awaiting CC learn
+
+  function setMidiUI() {
+    midiStateEl.textContent = `MIDI: ${state.midi.enabled ? "ON" : "OFF"}`;
+    midiInSelect.disabled = !state.midi.enabled;
+    midiRefresh.disabled = !state.midi.enabled;
+  }
+
+  async function initMIDI() {
+    if (!navigator.requestMIDIAccess) {
+      log("WebMIDI not supported in this browser.");
+      midiStateEl.classList.add("bad");
+      return;
+    }
+    try {
+      midiAccess = await navigator.requestMIDIAccess({ sysex: false });
+      state.midi.enabled = true;
+      setMidiUI();
+      log("MIDI enabled.");
+      refreshMidiInputs();
+      // auto-select previous input if possible
+      if (state.midi.inputId) {
+        midiInSelect.value = state.midi.inputId;
+        connectMidiInput(state.midi.inputId);
+      } else if (midiInSelect.options.length) {
+        connectMidiInput(midiInSelect.value);
+      }
+      save();
+    } catch (e) {
+      log("MIDI access denied or failed.");
+    }
+  }
+
+  function refreshMidiInputs() {
+    midiInSelect.innerHTML = "";
+    if (!midiAccess) return;
+    for (const input of midiAccess.inputs.values()) {
+      const opt = document.createElement('option');
+      opt.value = input.id;
+      opt.textContent = `${input.name || "MIDI Input"}${input.manufacturer ? " — " + input.manufacturer : ""}`;
+      midiInSelect.appendChild(opt);
+    }
+    if (!midiInSelect.options.length) {
+      const opt = document.createElement('option');
+      opt.value = "";
+      opt.textContent = "(no inputs)";
+      midiInSelect.appendChild(opt);
+    }
+  }
+
+  function connectMidiInput(inputId) {
+    if (!midiAccess || !inputId) return;
+    if (midiInput) midiInput.onmidimessage = null;
+    midiInput = midiAccess.inputs.get(inputId) || null;
+    if (!midiInput) return;
+    midiInput.onmidimessage = onMidiMessage;
+    state.midi.inputId = inputId;
+    save();
+    log(`Connected MIDI input: ${midiInput.name || midiInput.id}`);
+  }
+
+  function midiLearnStart(paramId) {
+    if (!state.midi.enabled) {
+      log("Enable MIDI first.");
+      return;
+    }
+    learnTarget = paramId;
+    log(`MIDI Learn: move a control for "${paramId}"...`);
+  }
+
+  function onMidiMessage(ev) {
+    const data = ev.data;
+    if (!data || data.length < 3) return;
+
+    const status = data[0] & 0xF0;
+    const ch = (data[0] & 0x0F) + 1; // 1..16
+    const d1 = data[1];
+    const d2 = data[2];
+
+    // Control Change
+    if (status === 0xB0) {
+      const cc = d1;
+      const value = d2; // 0..127
+
+      if (learnTarget) {
+        state.midi.maps[learnTarget] = { cc, ch, mode: "absolute" };
+        log(`Mapped ${learnTarget} to CC${cc} (ch ${ch}).`);
+        learnTarget = null;
+        save();
+        renderMidiTable();
+        return;
+      }
+
+      // Apply mappings
+      for (const [paramId, map] of Object.entries(state.midi.maps)) {
+        if (!map) continue;
+        if (map.cc === cc && map.ch === ch) {
+          const p = PARAMS.find(x => x[1] === paramId);
+          if (!p) continue;
+
+          if (map.mode === "absolute") {
+            const t = value / 127;
+            const v = paramFrom01(p, t);
+            setParam(paramId, v, { from: "midi" });
+          } else {
+            // relative mode: interpret 64 as no move, >64 up, <64 down
+            const delta = (value - 64) / 64; // -1..+1 roughly
+            const cur01 = valueToSlider(p, state.values[paramId]);
+            const next01 = clamp(cur01 + delta * 0.03, 0, 1);
+            setParam(paramId, paramFrom01(p, next01), { from: "midi" });
+          }
+        }
+      }
+    }
+  }
+
+  function renderMidiTable() {
+    mapTbody.innerHTML = "";
+    for (const p of PARAMS) {
+      const [,id] = p;
+      const map = state.midi.maps[id] || null;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="mono">${id}</td>
+        <td class="mono">${map ? map.cc : "—"}</td>
+        <td class="mono">${map ? map.ch : "—"}</td>
+        <td>
+          <select data-mode="${id}" ${map ? "" : "disabled"}>
+            <option value="absolute" ${map?.mode === "absolute" ? "selected":""}>absolute</option>
+            <option value="relative" ${map?.mode === "relative" ? "selected":""}>relative</option>
+          </select>
+        </td>
+        <td style="white-space:nowrap;">
+          <button class="btn small" data-learn="${id}">Learn</button>
+          <button class="btn small ghost" data-clear="${id}" ${map ? "" : "disabled"}>Clear</button>
+        </td>
+      `;
+      mapTbody.appendChild(tr);
+    }
+
+    mapTbody.querySelectorAll('button[data-learn]').forEach(btn => {
+      btn.addEventListener('click', () => midiLearnStart(btn.getAttribute('data-learn')));
+    });
+    mapTbody.querySelectorAll('button[data-clear]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-clear');
+        delete state.midi.maps[id];
+        save();
+        renderMidiTable();
+        log(`Mapping cleared for ${id}.`);
+      });
+    });
+    mapTbody.querySelectorAll('select[data-mode]').forEach(sel => {
+      sel.addEventListener('change', () => {
+        const id = sel.getAttribute('data-mode');
+        if (!state.midi.maps[id]) return;
+        state.midi.maps[id].mode = sel.value;
+        save();
+        log(`Mapping mode for ${id}: ${sel.value}`);
+      });
+    });
+  }
+
+  midiInitBtn.addEventListener('click', initMIDI);
+  midiRefresh.addEventListener('click', () => {
+    refreshMidiInputs();
+    log("MIDI inputs refreshed.");
+  });
+  midiInSelect.addEventListener('change', () => connectMidiInput(midiInSelect.value));
+  setMidiUI();
+  renderMidiTable();
+
+  // ---------- Autopilot Agent ----------
+  const agentToggle = document.getElementById('agentToggle');
+  const agentState = document.getElementById('agentState');
+  const agentGoal = document.getElementById('agentGoal');
+  const agentTick = document.getElementById('agentTick');
+  const macroTension = document.getElementById('macroTension');
+  const macroRelease = document.getElementById('macroRelease');
+  const macroAbyss = document.getElementById('macroAbyss');
+  const clearAutomation = document.getElementById('clearAutomation');
+
+  function setAgentUI() {
+    agentState.textContent = `Agent: ${state.agent.enabled ? "ON" : "OFF"}`;
+    agentToggle.textContent = state.agent.enabled ? "Stop" : "Run";
+  }
+
+  function parseGoal(text) {
+    const g = (text || "").toLowerCase();
+
+    // Score axes: -1..+1
+    const axes = {
+      harsh: 0, airy: 0, unstable: 0, dense: 0, deep: 0, bright: 0, wet: 0, feedback: 0
+    };
+
+    const bump = (key, v) => axes[key] = clamp(axes[key] + v, -1, 1);
+
+    const tokens = [
+      ["harsh", "harsh", 0.8],
+      ["abrasive", "harsh", 0.7],
+      ["distorted", "harsh", 0.6],
+      ["airy", "airy", 0.8],
+      ["hiss", "airy", 0.5],
+      ["unstable", "unstable", 0.8],
+      ["wobble", "unstable", 0.6],
+      ["dense", "dense", 0.8],
+      ["thick", "dense", 0.7],
+      ["wall", "dense", 0.6],
+      ["deep", "deep", 0.8],
+      ["low", "deep", 0.4],
+      ["bright", "bright", 0.7],
+      ["shimmer", "bright", 0.5],
+      ["wet", "wet", 0.7],
+      ["reverb", "wet", 0.6],
+      ["feedback", "feedback", 0.8],
+      ["scream", "feedback", 0.6],
+    ];
+    for (const [needle, key, val] of tokens) {
+      if (g.includes(needle)) bump(key, val);
+    }
+
+    // Simple negations
+    if (g.includes("less harsh") || g.includes("softer")) bump("harsh", -0.8);
+    if (g.includes("less feedback")) bump("feedback", -0.8);
+    if (g.includes("less wet") || g.includes("dryer")) bump("wet", -0.8);
+    if (g.includes("less bright") || g.includes("darker")) bump("bright", -0.8);
+    if (g.includes("less dense") || g.includes("thinner")) bump("dense", -0.8);
+    if (g.includes("stable")) bump("unstable", -0.8);
+
+    return axes;
+  }
+
+  function agentStep() {
+    const axes = parseGoal(state.agent.goal);
+
+    // If locked, don't change.
+    const nudge = (id, delta01) => {
+      if (state.locks[id]) return;
+      const p = PARAMS.find(x => x[1] === id);
+      const cur01 = valueToSlider(p, state.values[id]);
+      const next01 = clamp(cur01 + delta01, 0, 1);
+      setParam(id, paramFrom01(p, next01), { from: "agent" });
+    };
+
+    // Convert axes into parameter nudges
+    // Harsh: more drive, more resonance, lower cutoff a bit, more feedback
+    nudge("drive", 0.020 * axes.harsh);
+    nudge("q", 0.018 * axes.harsh);
+    nudge("cutoff", -0.012 * axes.harsh);
+    nudge("fb", 0.010 * axes.harsh);
+
+    // Airy: more noise, higher cutoff, less q
+    nudge("noise", 0.018 * axes.airy);
+    nudge("cutoff", 0.018 * axes.airy);
+    nudge("q", -0.010 * axes.airy);
+
+    // Unstable: more detune, higher LFO depth/rate
+    nudge("detune", 0.018 * axes.unstable);
+    nudge("lfoDepth", 0.020 * axes.unstable);
+    nudge("lfoRate", 0.012 * axes.unstable);
+
+    // Dense: more voices, more noise, slightly lower base freq
+    nudge("voices", 0.015 * axes.dense);
+    nudge("noise", 0.010 * axes.dense);
+    nudge("baseFreq", -0.010 * axes.dense);
+
+    // Deep: lower base freq, lower cutoff, more wet
+    nudge("baseFreq", -0.020 * axes.deep);
+    nudge("cutoff", -0.012 * axes.deep);
+    nudge("rvb", 0.010 * axes.deep);
+
+    // Bright: higher cutoff, less wet
+    nudge("cutoff", 0.020 * axes.bright);
+    nudge("rvb", -0.010 * axes.bright);
+
+    // Wet: more rvb
+    nudge("rvb", 0.020 * axes.wet);
+
+    // Feedback axis
+    nudge("fb", 0.022 * axes.feedback);
+
+    // Add small stochastic drift for “agency”
+    if (Math.random() < 0.35) randomizeOnce(0.25);
+  }
+
+  function startAgent() {
+    stopAgent();
+    state.agent.goal = agentGoal.value || "";
+    state.agent.tick = parseFloat(agentTick.value) || 1.0;
+    state.agent.enabled = true;
+    state.agent.timer = setInterval(agentStep, Math.max(200, state.agent.tick * 1000));
+    setAgentUI();
+    save();
+    log(`Agent running (${state.agent.tick}s tick).`);
+  }
+
+  function stopAgent() {
+    if (state.agent.timer) clearInterval(state.agent.timer);
+    state.agent.timer = null;
+    state.agent.enabled = false;
+    setAgentUI();
+    save();
+    log("Agent stopped.");
+  }
+
+  agentGoal.addEventListener('change', () => {
+    state.agent.goal = agentGoal.value || "";
+    save();
+  });
+  agentTick.addEventListener('change', () => {
+    state.agent.tick = parseFloat(agentTick.value) || 1.0;
+    save();
+    if (state.agent.enabled) startAgent();
+  });
+  agentToggle.addEventListener('click', () => {
+    if (state.agent.enabled) stopAgent();
+    else startAgent();
+  });
+
+  function macroApply(kind) {
+    // Macro moves are intentional and larger, but still clamped.
+    const doSet = (id, t01) => {
+      if (state.locks[id]) return;
+      const p = PARAMS.find(x => x[1] === id);
+      setParam(id, paramFrom01(p, t01), { from: "macro" });
+    };
+
+    if (kind === "tension") {
+      doSet("drive", 0.85);
+      doSet("fb", 0.86);
+      doSet("q", 0.55);
+      doSet("cutoff", 0.28);
+      doSet("noise", 0.60);
+      doSet("detune", 0.62);
+      doSet("voices", 0.82);
+      doSet("rvb", 0.25);
+      doSet("lfoRate", 0.38);
+      doSet("lfoDepth", 0.55);
+      log("Macro applied: Tension.");
+    } else if (kind === "release") {
+      doSet("drive", 0.35);
+      doSet("fb", 0.55);
+      doSet("q", 0.18);
+      doSet("cutoff", 0.62);
+      doSet("noise", 0.38);
+      doSet("detune", 0.22);
+      doSet("voices", 0.55);
+      doSet("rvb", 0.55);
+      doSet("lfoRate", 0.20);
+      doSet("lfoDepth", 0.22);
+      log("Macro applied: Release.");
+    } else if (kind === "abyss") {
+      doSet("baseFreq", 0.14);
+      doSet("cutoff", 0.18);
+      doSet("q", 0.32);
+      doSet("drive", 0.72);
+      doSet("fb", 0.90);
+      doSet("noise", 0.52);
+      doSet("rvb", 0.70);
+      doSet("voices", 0.90);
+      doSet("detune", 0.40);
+      doSet("lfoRate", 0.12);
+      doSet("lfoDepth", 0.35);
+      log("Macro applied: Abyss.");
+    }
+    save();
+  }
+
+  macroTension.addEventListener('click', () => macroApply("tension"));
+  macroRelease.addEventListener('click', () => macroApply("release"));
+  macroAbyss.addEventListener('click', () => macroApply("abyss"));
+
+  clearAutomation.addEventListener('click', () => {
+    if (state.random.enabled) stopRandom();
+    if (state.agent.enabled) stopAgent();
+    learnTarget = null;
+    log("All automation stopped (random + agent + learn).");
+  });
+
+  setAgentUI();
+  if (state.agent.enabled) startAgent();
+
+  // ---------- Export / Import ----------
+  const exportBtn = document.getElementById('exportBtn');
+  const importBtn = document.getElementById('importBtn');
+  const importFile = document.getElementById('importFile');
+
+  exportBtn.addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = "noise-drone-wall-config.json";
+    a.click();
+    URL.revokeObjectURL(url);
+    log("Exported JSON.");
+  });
+
+  importBtn.addEventListener('click', () => importFile.click());
+  importFile.addEventListener('change', async () => {
+    const file = importFile.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const obj = JSON.parse(text);
+      if (!obj.values) throw new Error("Invalid file.");
+      // merge
+      state.seed = obj.seed ?? state.seed;
+      state.values = { ...state.values, ...obj.values };
+      state.locks = { ...state.locks, ...obj.locks };
+      state.midi.maps = { ...obj.midi?.maps };
+      state.midi.inputId = obj.midi?.inputId ?? state.midi.inputId;
+      state.random.every = obj.random?.every ?? state.random.every;
+      state.agent.tick = obj.agent?.tick ?? state.agent.tick;
+      state.agent.goal = obj.agent?.goal ?? state.agent.goal;
+
+      renderParams();
+      renderMidiTable();
+      updateSeedUI();
+      document.getElementById('randEvery').value = state.random.every;
+      document.getElementById('agentTick').value = state.agent.tick;
+      document.getElementById('agentGoal').value = state.agent.goal || "";
+
+      if (nodes && state.audio.running) {
+        nodes.rebuildOscBank(state.values.voices);
+        applyAllNow();
+      }
+      save();
+      log("Imported JSON.");
+    } catch {
+      log("Import failed (invalid JSON).");
+    } finally {
+      importFile.value = "";
+    }
+  });
+
+  // ---------- First paint ----------
+  updateSeedUI();
+  log("Ready. Start audio, optionally enable MIDI, then explore random + agent.");
+})();
+</script>
+</body>
+</html>
